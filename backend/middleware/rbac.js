@@ -1,105 +1,289 @@
-import AccessControl from 'accesscontrol';
+import User from '../models/User.js';
+import Role from '../models/Role.js';
+import Permission from '../models/Permission.js';
+import ModelHasRole from '../models/ModelHasRole.js';
+import ModelHasPermission from '../models/ModelHasPermission.js';
 
-// Define roles and permissions
-const ac = new AccessControl();
-
-// Customer permissions
-ac.grant('customer')
-  .readOwn('order')
-  .createOwn('order')
-  .readOwn('cart')
-  .createOwn('cart')
-  .updateOwn('cart')
-  .deleteOwn('cart')
-  .readAny('menu');
-
-// Merchant permissions
-ac.grant('merchant')
-  .extend('customer') // Merchant inherits customer permissions
-  .readAny('order')
-  .updateAny('order')
-  .createOwn('menu')
-  .readOwn('menu')
-  .updateOwn('menu')
-  .deleteOwn('menu');
-
-// RBAC middleware
-export const checkPermission = (action, resource) => {
+// Check if user has specific permission
+export const hasPermission = (permissionName) => {
   return async (req, res, next) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      const role = req.user.role;
-      
-      // Map action to accesscontrol format
-      // For "create", check both createOwn and createAny
-      let permission;
-      if (action === 'create') {
-        // Try createOwn first, then createAny
-        permission = ac.can(role).createOwn(resource);
-        if (!permission.granted) {
-          permission = ac.can(role).createAny(resource);
-        }
-      } else if (action === 'read') {
-        // Try readOwn first, then readAny
-        permission = ac.can(role).readOwn(resource);
-        if (!permission.granted) {
-          permission = ac.can(role).readAny(resource);
-        }
-      } else if (action === 'update') {
-        // Try updateOwn first, then updateAny
-        permission = ac.can(role).updateOwn(resource);
-        if (!permission.granted) {
-          permission = ac.can(role).updateAny(resource);
-        }
-      } else if (action === 'delete') {
-        // Try deleteOwn first, then deleteAny
-        permission = ac.can(role).deleteOwn(resource);
-        if (!permission.granted) {
-          permission = ac.can(role).deleteAny(resource);
-        }
-      } else {
-        // Try the action directly
-        permission = ac.can(role)[action](resource);
+      // Reload user with roles and permissions
+      const user = await User.findByPk(req.user.id, {
+        include: [
+          {
+            model: Role,
+            as: 'roles',
+            through: {
+              model: ModelHasRole,
+              where: { model_type: 'User' },
+              attributes: []
+            },
+            include: [{
+              model: Permission,
+              as: 'permissions'
+            }]
+          },
+          {
+            model: Permission,
+            as: 'permissions',
+            through: {
+              model: ModelHasPermission,
+              where: { model_type: 'User' },
+              attributes: []
+            }
+          }
+        ]
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
       }
 
-      if (!permission.granted) {
-        return res.status(403).json({ 
-          message: `Access denied. You don't have permission to ${action} ${resource}.` 
+      const hasPermission = await user.hasPermission(permissionName);
+
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: `Access denied. You don't have permission: ${permissionName}`
         });
       }
 
-      req.permission = permission;
+      req.user = user; // Update req.user with loaded relationships
       next();
     } catch (error) {
-      return res.status(500).json({ message: 'Permission check failed', error: error.message });
+      return res.status(500).json({
+        message: 'Permission check failed',
+        error: error.message
+      });
     }
   };
 };
 
-// Helper function to check ownership
+// Check if user has any of the permissions
+export const hasAnyPermission = (permissionNames) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const user = await User.findByPk(req.user.id, {
+        include: [
+          { 
+            model: Role, 
+            as: 'roles',
+            through: {
+              model: ModelHasRole,
+              where: { model_type: 'User' },
+              attributes: []
+            },
+            include: [{ 
+              model: Permission, 
+              as: 'permissions' 
+            }] 
+          },
+          { 
+            model: Permission, 
+            as: 'permissions',
+            through: {
+              model: ModelHasPermission,
+              where: { model_type: 'User' },
+              attributes: []
+            }
+          }
+        ]
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const hasAny = await user.hasAnyPermission(permissionNames);
+
+      if (!hasAny) {
+        return res.status(403).json({
+          message: `Access denied. Required permissions: ${permissionNames.join(', ')}`
+        });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      return res.status(500).json({
+        message: 'Permission check failed',
+        error: error.message
+      });
+    }
+  };
+};
+
+// Check if user has all permissions
+export const hasAllPermissions = (permissionNames) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const user = await User.findByPk(req.user.id, {
+        include: [
+          { 
+            model: Role, 
+            as: 'roles',
+            through: {
+              model: ModelHasRole,
+              where: { model_type: 'User' },
+              attributes: []
+            },
+            include: [{ 
+              model: Permission, 
+              as: 'permissions' 
+            }] 
+          },
+          { 
+            model: Permission, 
+            as: 'permissions',
+            through: {
+              model: ModelHasPermission,
+              where: { model_type: 'User' },
+              attributes: []
+            }
+          }
+        ]
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const hasAll = await user.hasAllPermissions(permissionNames);
+
+      if (!hasAll) {
+        return res.status(403).json({
+          message: `Access denied. Required all permissions: ${permissionNames.join(', ')}`
+        });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      return res.status(500).json({
+        message: 'Permission check failed',
+        error: error.message
+      });
+    }
+  };
+};
+
+// Check if user has specific role
+export const hasRole = (roleName) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const user = await User.findByPk(req.user.id, {
+        include: [{ 
+          model: Role, 
+          as: 'roles',
+          through: {
+            model: ModelHasRole,
+            where: { model_type: 'User' },
+            attributes: []
+          }
+        }]
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const hasRole = await user.hasRole(roleName);
+
+      if (!hasRole) {
+        return res.status(403).json({
+          message: `Access denied. Required role: ${roleName}`
+        });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      return res.status(500).json({
+        message: 'Role check failed',
+        error: error.message
+      });
+    }
+  };
+};
+
+// Check if user has any of the roles
+export const hasAnyRole = (roleNames) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const user = await User.findByPk(req.user.id, {
+        include: [{ 
+          model: Role, 
+          as: 'roles',
+          through: {
+            model: ModelHasRole,
+            where: { model_type: 'User' },
+            attributes: []
+          }
+        }]
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const hasAny = await user.hasAnyRole(roleNames);
+
+      if (!hasAny) {
+        return res.status(403).json({
+          message: `Access denied. Required roles: ${roleNames.join(', ')}`
+        });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      return res.status(500).json({
+        message: 'Role check failed',
+        error: error.message
+      });
+    }
+  };
+};
+
+// Helper function to check ownership (for backward compatibility)
 export const checkOwnership = (resource, resourceUserId) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // Merchants can access any order (for managing orders)
-    if (req.user.role === 'merchant' && resource === 'order') {
+    // Check if user has permission to manage all resources
+    if (req.user.hasPermission && req.user.hasPermission('order.view.all')) {
       return next();
     }
 
     // Check if user owns the resource
     if (resourceUserId !== req.user.id) {
-      return res.status(403).json({ message: 'Access denied. You can only access your own resources.' });
+      return res.status(403).json({ 
+        message: 'Access denied. You can only access your own resources.' 
+      });
     }
 
     next();
   };
 };
-
-// Export access control instance for direct use if needed
-export { ac };
-

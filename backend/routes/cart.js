@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { checkPermission } from '../middleware/rbac.js';
+import { hasPermission } from '../middleware/rbac.js';
 import { validateAddToCart, validateUpdateCart, validateIdParam } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -11,7 +11,7 @@ const carts = new Map();
 // Get cart
 router.get('/', 
   authenticate, 
-  checkPermission('read', 'cart'),
+  hasPermission('cart.view'),
   (req, res) => {
     const cart = carts.get(req.user.id) || [];
     res.json(cart);
@@ -21,7 +21,7 @@ router.get('/',
 // Add to cart
 router.post('/add', 
   authenticate, 
-  checkPermission('create', 'cart'),
+  hasPermission('cart.add'),
   validateAddToCart,
   (req, res) => {
     const { menuId, quantity } = req.body;
@@ -43,7 +43,7 @@ router.post('/add',
 // Update cart item
 router.put('/update', 
   authenticate, 
-  checkPermission('update', 'cart'),
+  hasPermission('cart.update'),
   validateUpdateCart,
   (req, res) => {
     const { menuId, quantity } = req.body;
@@ -64,7 +64,7 @@ router.put('/update',
 // Remove from cart
 router.delete('/remove/:menuId', 
   authenticate, 
-  checkPermission('delete', 'cart'),
+  hasPermission('cart.delete'),
   validateIdParam,
   (req, res) => {
     let cart = carts.get(req.user.id) || [];
@@ -77,7 +77,7 @@ router.delete('/remove/:menuId',
 // Clear cart
 router.delete('/clear', 
   authenticate, 
-  checkPermission('delete', 'cart'),
+  hasPermission('cart.delete'),
   (req, res) => {
     carts.set(req.user.id, []);
     res.json({ message: 'Cart cleared' });

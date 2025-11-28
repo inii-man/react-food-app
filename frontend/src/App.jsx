@@ -11,6 +11,7 @@ import OrderDetail from './pages/OrderDetail';
 import MerchantDashboard from './pages/MerchantDashboard';
 import MerchantMenu from './pages/MerchantMenu';
 import MerchantOrders from './pages/MerchantOrders';
+import RolePermissionManagement from './pages/RolePermissionManagement';
 
 function App() {
   return (
@@ -69,6 +70,16 @@ function App() {
           element={
             <RBACRoute requiredRole="merchant">
               <MerchantOrders />
+            </RBACRoute>
+          }
+        />
+        
+        {/* Super Admin routes */}
+        <Route
+          path="/superadmin/rbac"
+          element={
+            <RBACRoute requiredRole="superadmin">
+              <RolePermissionManagement />
             </RBACRoute>
           }
         />

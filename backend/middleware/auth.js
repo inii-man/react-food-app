@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import Role from '../models/Role.js';
+import Permission from '../models/Permission.js';
 
 export const authenticate = async (req, res, next) => {
   try {
@@ -14,7 +16,37 @@ export const authenticate = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findByPk(decoded.userId);
+    
+    // Load user with roles and permissions for RBAC
+    const ModelHasRole = (await import('../models/ModelHasRole.js')).default;
+    const ModelHasPermission = (await import('../models/ModelHasPermission.js')).default;
+    
+    const user = await User.findByPk(decoded.userId, {
+      include: [
+        {
+          model: Role,
+          as: 'roles',
+          through: {
+            model: ModelHasRole,
+            where: { model_type: 'User' },
+            attributes: []
+          },
+          include: [{
+            model: Permission,
+            as: 'permissions'
+          }]
+        },
+        {
+          model: Permission,
+          as: 'permissions',
+          through: {
+            model: ModelHasPermission,
+            where: { model_type: 'User' },
+            attributes: []
+          }
+        }
+      ]
+    });
     
     if (!user) {
       return res.status(401).json({ message: 'User not found' });

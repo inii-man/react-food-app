@@ -123,6 +123,17 @@ function Layout({ children }) {
                   </>
                 )}
 
+                {(user?.roles?.includes('superadmin') || user?.role === 'superadmin') && (
+                  <Button
+                    component={Link}
+                    to="/superadmin/rbac"
+                    color="inherit"
+                    sx={{ fontWeight: 'bold' }}
+                  >
+                    RBAC Management
+                  </Button>
+                )}
+
                 <Typography variant="body2" sx={{ px: 1 }}>
                   {user?.name}
                 </Typography>
